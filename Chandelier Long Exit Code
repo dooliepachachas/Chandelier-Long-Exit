@@ -1,0 +1,57 @@
+[IntrabarOrderGeneration = false]
+
+inputs:
+	double Price( High ) [
+		DisplayName = "Price", 
+		ToolTip = "Enter the price from which a number of average true ranges is subtracted to calculate the stop price."],
+	
+	double NumATRs( 3 ) [
+		DisplayName = "NumATRs", 
+		ToolTip = "Number of Average True Ranges.  Enter the number of average true ranges at which to trail the stop order."],
+	
+	int ATRLength( 22 ) [
+		DisplayName = "ATRLength", 
+		ToolTip = "Average True Range Length.  Enter the number of bars to use in the moving average of true range."],
+
+	int StopPriceCanDecrease( 1 ) [ 
+		DisplayName = "StopPriceCanDecrease", 
+		ToolTip = "Enter 0 to prevent the stop price from decreasing while in a trade.  Enter 1 to allow the stop price to decrease."];
+
+variables:  
+	double ATRCalc( 0 ), 
+	double MP( 0 ),  
+	double PosHigh( 0 ),
+	double LXStopPrice( 0 );
+
+ATRCalc = AvgTrueRange( ATRLength ) * NumATRs; 
+MP = MarketPosition;
+
+switch ( MP )
+begin
+	case 1:  { long }
+		if MP[1] <> 1 then
+		begin
+			PosHigh = Price;
+			LXStopPrice = PosHigh - ATRCalc;
+		end
+		else 
+		begin
+			{ keep track of new highs in price made during the trade }
+			if Price > PosHigh then
+				PosHigh = Price;
+			
+			if StopPriceCanDecrease = 1 then
+				LXStopPrice = PosHigh - ATRCalc
+			else
+				{ do not allow the stop to loosen }
+				LXStopPrice = MaxList( LXStopPrice, PosHigh - ATRCalc );	
+		end;
+		
+		Sell ( !( "ChLX" ) ) next bar at LXStopPrice stop;
+
+	default: { short or flat }
+		LXStopPrice = Price - ATRCalc;
+	
+		{ issue exit for entry bar protection }
+		Sell ( !( "ChLXQ" ) ) next bar at LXStopPrice stop;
+end;
